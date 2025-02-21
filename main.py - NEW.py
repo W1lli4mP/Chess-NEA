@@ -126,7 +126,7 @@ class Piece:
             
             enemyPiece = board.GetPieceAt((x + 1, y + direction)) # right
             capturePosition = (x + 1, y + direction)
-            if enemyPiece != None and enemyPiece.colour != self.colour or (capturePosition == board.enPassantTarget):
+            if enemyPiece is not None and enemyPiece.colour != self.colour or (capturePosition == board.enPassantTarget):
                 moves.append((x + 1, y + direction))
 
         if self.type == "k":
@@ -143,7 +143,7 @@ class Piece:
                 left = []
                 invalid = False
                 for i in range(1, 5): # must start at 1
-                    if i != 4 and board.GetPieceAt((x - i, y)) != None: # check if we are on last increment - we want the rook to be there
+                    if i != 4 and board.GetPieceAt((x - i, y)) is not None: # check if we are on last increment - we want the rook to be there
                         invalid = True
                         break
                     left.append(board.GetPieceAt((x - i, y)))
@@ -156,7 +156,7 @@ class Piece:
                 right = []
                 invalid = False
                 for i in range(1, 4):
-                    if i != 3 and board.GetPieceAt((x + i, y)) != None:
+                    if i != 3 and board.GetPieceAt((x + i, y)) is not None:
                         invalid = True
                         break
                     right.append(board.GetPieceAt((x + i, y)))
@@ -233,11 +233,29 @@ class Engine:
                 return True
         return False
     
+    def IsSquareAttacked(self, position, enemyColour, board): # different board state
+        for piece in board.GetPieces(enemyColour):
+            if position in piece.CalculatePseudoLegalMoves(board):
+                return True
+        return False
+
     def CalculateLegalMoves(self, piece, board):
-        pseudoMove = piece.CalculatePseudoLegalMoves(board)
+        pseudoMoves = piece.CalculatePseudoLegalMoves(board)
         legalMoves = []
         savedEnPassant = board.enPassantTarget
-        for move in pseudoMove:
+        enemyColour = "w" if piece.colour == "b" else "b"
+
+        for move in pseudoMoves:
+            # extra check for castling moves - king moving 2 squares to the left/right
+            # determine the square the king crosses (sequentially?)
+            if piece.type == "k" and abs(piece.position[0] - move[0]) == 2: # only need to observe the x-axis, this could be -2, use abs()
+                if move[0] > piece.position[0]:
+                    intermediate = (piece.position[0] + 1, piece.position[1]) # intermediate square (in between) depending on the direction of the castle
+                else:
+                    intermediate = (piece.position[0] - 1, piece.position[1])
+                if self.IsSquareAttacked(intermediate, enemyColour, board):
+                    continue
+
             originalPosition = piece.position
             captured = board.GetPieceAt(move)
             capturedEnemyPiece = None
@@ -298,7 +316,7 @@ class Game:
         self.moveHistory = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -453,4 +471,5 @@ def main():
 
 main()
 
-## TESTING THE AI
+## FLAWS
+# king can still castle even when there is an enemy piece supposedly blocking the path
