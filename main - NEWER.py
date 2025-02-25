@@ -24,7 +24,9 @@ class Move:
         self.endRow, self.endCol = endSquare
         self.pieceMoved = board.GetPieceAt(startSquare)
         self.pieceCaptured = board.GetPieceAt(endSquare)
-        self.oldEnPassantTarget = board.enPassantTarget # save to restore later
+        # restore piece's moved state
+        self.pieceMovedWasMoved = self.pieceMoved if self.pieceMoved else None # set it to the piece if there actually is a piece
+        self.oldEnPassantTarget = board.enPassantTarget
 
         # need to determine captured piece for en passant (the captured pawn is NOT on the end square)
         self.isEnPassant = False
@@ -58,8 +60,12 @@ class Timer:
     def __init__(self, timeSeconds):
         self.remaining = timeSeconds
         self.lastTick = pygame.time.get_ticks()
+        self.running = False
 
     def Update(self):
+        if not self.running:
+            self.lastTick = pygame.time.get_ticks() # refresh so not delta accumulates
+            return
         now = pygame.time.get_ticks()
         delta = (now - self.lastTick) / 1000.0
         self.remaining -= delta
@@ -68,6 +74,7 @@ class Timer:
     def Reset(self, timeSeconds):
         self.remaining = timeSeconds
         self.lastTick = pygame.time.get_ticks()
+        self.running = False # restart into pause mode
 
     def GetTime(self):
         return max(0, self.remaining)
@@ -352,7 +359,7 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -447,7 +454,15 @@ class Game:
             piece.Promote(self.board)
             move.promoted = True
 
-        self.currentTurn = "w" if self.currentTurn == "b" else "b"
+        # switching turns (now with timers)
+        if self.currentTurn == "w":
+            self.timers["w"].running = False
+            self.currentTurn = "b"
+            self.timers["b"].running = True
+        else:
+            self.timers["b"].running = False
+            self.currentTurn = "w"
+            self.timers["w"].running = True
 
     def UndoMove(self):
         if self.historyIndex >= 0: # if the move log is not empty, then theres no move to undo duhh
@@ -458,7 +473,8 @@ class Game:
             self.board.grid[(move.endRow, move.endCol)] = None
             piece.position = (move.startRow, move.startCol)
             self.board.grid[(move.startRow, move.startCol)] = piece
-            piece.moved = False
+            # restore original move state
+            piece.moved = move.pieceMovedWasMoved
 
             if move.promoted:
                 piece.type = "p"
@@ -551,11 +567,24 @@ class Game:
         return isinstance(self.players[self.currentTurn], Human)
     
     def Update(self):
-        # update timer for current player
+        # pause timers when game is over
+        if self.gameOver:
+            self.timers["w"].running = False
+            self.timers["b"].running = False
+            return # skip further updates
+
+        # update timer for active player
         self.timers[self.currentTurn].Update()
+
+        # for inactive timer, refresh lastTick so they don't accidentally subtract time
+        currentTime = pygame.time.get_ticks()
+
+        for colour, timer in self.timers.items():
+            if colour != self.currentTurn:
+                timer.lastTick = currentTime
+
         # if its an AI's turn, ask AI to choose an execute a move
         if self.engine.IsCheckmate(self.currentTurn, self.board):
-            print("CHECKMATE DETECTED")
             self.gameOver = True # instead of self.running = False
         else:
             if not self.disableAI and not self.CurrentPlayerIsHuman():
@@ -585,6 +614,15 @@ class Game:
             font = pygame.font.SysFont("Arial", 50)
             text = font.render("Checkmate!", True, (255, 255, 255))
             self.screen.blit(text, (self.offset[0], self.offset[1] - 60))
+
+        # timer render
+        font = pygame.font.SysFont("Arial", 36)
+        black_time = int(self.timers["b"].GetTime())
+        white_time = int(self.timers["w"].GetTime())
+        black_text = font.render(f"Black: {black_time}", True, (255, 255, 255))
+        white_text = font.render(f"White: {white_time}", True, (255, 255, 255))
+        self.screen.blit(black_text, (20, 20))
+        self.screen.blit(white_text, (20, self.screen.get_height() - 40))
 
         ## ADD INTERFACE RENDERING HERE + TIMERS
         pygame.display.flip()
@@ -635,3 +673,13 @@ main()
 # when undoing, human player can select a piece in the past then when redoing/undoing to another position, the valid moves from the initial selected piece
 # are still applied, meaning illegal moves can be made
 # fixed by clearing the selection at the end of Undo() and Redo()
+# pawns can move up twice in circumstances where they shouldnt when using Undo()
+# updated Move class with pieceMovedWasMoved attribute as a flag, changing piece.moved = False to piece.moved = move.pieceMovedWasMoved in Undo()
+# no timers shown
+# renders timers in Render()
+# both timers count down even when its not their turn
+# updated Update() in Game class
+# white's timer starts immediately as soon as the game is run
+# added running flag in Timer, updated Update() in Game
+# timer doesnt end when game over
+# used gameOver flag to pause timers
