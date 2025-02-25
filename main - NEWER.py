@@ -491,6 +491,10 @@ class Game:
             self.currentTurn = "w" if self.currentTurn == "b" else "b"
             self.historyIndex -= 1
 
+            # clear selection
+            self.selectedPiece = None
+            self.validMoves = []
+
             # disable AI
             self.disableAI = True
 
@@ -535,6 +539,10 @@ class Game:
 
             # update turn
             self.currentTurn = "w" if self.currentTurn == "b" else "b"
+
+            # clear selection
+            self.selectedPiece = None
+            self.validMoves = []
 
             # disable AI
             self.disableAI = True
@@ -624,3 +632,6 @@ main()
 # disableAI flag
 # program is forced to close when checkmate occurs
 # gameOver flag
+# when undoing, human player can select a piece in the past then when redoing/undoing to another position, the valid moves from the initial selected piece
+# are still applied, meaning illegal moves can be made
+# fixed by clearing the selection at the end of Undo() and Redo()
