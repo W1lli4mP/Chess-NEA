@@ -373,7 +373,7 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -384,6 +384,7 @@ class Game:
 
         self.disableAI = False
         self.gameOver = False
+        self.highlightedSquares = []
 
     def SetupPieces(self): # sets pieces positions up
         generalOrder = ["r", "n", "b", "q", "k", "b", "n", "r"]
@@ -417,9 +418,15 @@ class Game:
                 self.running = False
             # only handle mouse clicks if it is a human player's turn
             if self.CurrentPlayerIsHuman():
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if event.type == pygame.MOUSEBUTTONDOWN:
                     position = ScreenToBoard(event.pos, self.offset)
-                    self.HandleHumanClick(position)
+                    if event.button == 1:
+                        self.HandleHumanClick(position)
+                    elif event.button == 3:
+                        if position in self.highlightedSquares:
+                            self.highlightedSquares.remove(position)
+                        else:
+                            self.highlightedSquares.append(position)
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
@@ -430,6 +437,7 @@ class Game:
     def HandleHumanClick(self, position): # handles selecting/deselecting pieces
         piece = self.board.GetPieceAt(position)
         if self.selectedPiece is None:
+            self.highlightedSquares = [] # unselect annotation squares
             if piece and piece.colour == self.currentTurn:
                 self.selectedPiece = piece
                 self.validMoves = self.engine.CalculateLegalMoves(piece, self.board)
@@ -629,8 +637,9 @@ class Game:
         ColourScheme3 = ["red", "green", "purple", "purple"]
         ColourScheme4 = ["red", "cyan", "purple", "purple"]
 
-
         spColour, vmColour, toColour, fmColour = ColourScheme4
+
+        hlColour = "yellow"
 
         self.screen.fill("#04202F")
         self.board.Draw(self.offset)
@@ -668,12 +677,19 @@ class Game:
             self.screen.blit(toSquare, toPosition)
             self.screen.blit(fromSquare, fromPosition)
 
+        for square in self.highlightedSquares:
+            position = BoardToScreen(square, self.offset)
+            highlightSquare = pygame.Surface((squareSize, squareSize))
+            highlightSquare.set_alpha(100)
+            highlightSquare.fill(hlColour)
+            self.screen.blit(highlightSquare, position)
+
+
         # render all pieces
         for piece in self.board.grid.values():
             if piece:
                 piece.Render(self.screen, self.offset)
         
-
         # game over rendering
         if self.gameOver: # temp message
             font = pygame.font.SysFont("Arial", 50)
@@ -743,3 +759,7 @@ main()
 # inverted the original logic of the Board's Draw() method
 # move highlighting could be improved
 # made a surface that covers an entire square, made it transparent and under the pieces by changing drawing order
+# no move annotation
+# added highlightedSquares attribute, RMB detection in HandleEvents(), rendering in Render()
+# highlighted/annotation squares are difficult to remove
+# in HandleHumanClick(), if LMB clicked on an empty square, highlightedSquares list is erased
