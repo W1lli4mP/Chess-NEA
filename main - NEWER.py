@@ -327,6 +327,20 @@ class Engine:
                 return False
         return True
 
+    def IsStalemate(self, colour, board):
+        if self.IsCheck(colour, board):
+            return False
+        for piece in self.GetAllPieces(board, colour):
+            if self.CalculateLegalMoves(piece, board):
+                return False
+        return True
+        
+    def IsDraw(self, board): # cba for other cases for now so its going to be draw IIF 2 kings on the board
+        pieces = [piece for piece in board.grid.values() if piece is not None]
+        # if there are exactly 2 pieces and both are kings, thats a draw.
+        if len(pieces) == 2 and all(piece.type == "k" for piece in pieces):
+            return True
+
 class Player:
     def __init__(self, colour):
         self.colour = colour
@@ -359,12 +373,12 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
         self.offset = offset
-        self.timers = {"w": Timer(300), "b": Timer(300)}
+        self.timers = {"w": Timer(100000), "b": Timer(10000)} # change later to respond to user input
         self.running = True
         self.SetupPieces()
 
@@ -567,11 +581,29 @@ class Game:
         return isinstance(self.players[self.currentTurn], Human)
     
     def Update(self):
+        if self.timers[self.currentTurn].GetTime() <= 0:
+            self.gameOver = True
+            self.gameOverMessage = "Time's up!"
+
         # pause timers when game is over
         if self.gameOver:
             self.timers["w"].running = False
             self.timers["b"].running = False
             return # skip further updates
+
+        # checkmate + stalemate detection
+        if self.engine.IsCheckmate(self.currentTurn, self.board):
+            self.gameOver = True
+            self.gameOverMessage = "Checkmate!"
+            return
+        elif self.engine.IsStalemate(self.currentTurn, self.board):
+            self.gameOver = True
+            self.gameOverMessage = "Stalemate!"
+            return
+        elif self.engine.IsDraw(self.board):
+            self.gameOver = True
+            self.gameOverMessage = "Draw!"
+            return
 
         # update timer for active player
         self.timers[self.currentTurn].Update()
@@ -584,10 +616,7 @@ class Game:
                 timer.lastTick = currentTime
 
         # if its an AI's turn, ask AI to choose an execute a move
-        if self.engine.IsCheckmate(self.currentTurn, self.board):
-            self.gameOver = True # instead of self.running = False
-        else:
-            if not self.disableAI and not self.CurrentPlayerIsHuman():
+        if not self.disableAI and not self.CurrentPlayerIsHuman():
                 AIMove = self.players[self.currentTurn].ChooseMove(self)
                 if AIMove:
                     piece, move = AIMove
@@ -612,7 +641,7 @@ class Game:
         # game over rendering
         if self.gameOver: # temp message
             font = pygame.font.SysFont("Arial", 50)
-            text = font.render("Checkmate!", True, (255, 255, 255))
+            text = font.render(self.gameOverMessage, True, (255, 255, 255))
             self.screen.blit(text, (self.offset[0], self.offset[1] - 60))
 
         # timer render
@@ -624,7 +653,7 @@ class Game:
         self.screen.blit(black_text, (20, 20))
         self.screen.blit(white_text, (20, self.screen.get_height() - 40))
 
-        ## ADD INTERFACE RENDERING HERE + TIMERS
+        ## ADD INTERFACE RENDERING HERE
         pygame.display.flip()
 
 def main():
@@ -664,22 +693,9 @@ main()
 # sort a list of moves and even binary search when evaluating with piece values for the AI
 
 ## FLAWS
-# no redo
-# added Redo() and updated Move class, changing MakeMove() and Undo()
-# when against AI, Undo() and Redo() are useless
-# disableAI flag
-# program is forced to close when checkmate occurs
-# gameOver flag
-# when undoing, human player can select a piece in the past then when redoing/undoing to another position, the valid moves from the initial selected piece
-# are still applied, meaning illegal moves can be made
-# fixed by clearing the selection at the end of Undo() and Redo()
-# pawns can move up twice in circumstances where they shouldnt when using Undo()
-# updated Move class with pieceMovedWasMoved attribute as a flag, changing piece.moved = False to piece.moved = move.pieceMovedWasMoved in Undo()
-# no timers shown
-# renders timers in Render()
-# both timers count down even when its not their turn
-# updated Update() in Game class
-# white's timer starts immediately as soon as the game is run
-# added running flag in Timer, updated Update() in Game
-# timer doesnt end when game over
-# used gameOver flag to pause timers
+# doesnt detect stalemate
+# added IsStalemate() in Engine, updated Update() and Render() in Game
+# doesnt detect a draw for when there are only 2 kings (very common for basic AI vs basic AI)
+# made IsDraw() in Engine
+# game doesnt end when timer ends
+# added a condition that detects this in Update()
