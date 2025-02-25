@@ -207,7 +207,7 @@ class Piece:
         return moves
 
     def Promote(self, board):
-        sprite = pygame.image.load(f"Pieces/{self.colour}q.png")
+        sprite = pygame.image.load(f"Pieces/{self.colour}q.png").convert_alpha()
         sprite = pygame.transform.scale(sprite, (squareSize, squareSize))
         newPiece = Piece(f"{self.colour}q", self.position, sprite)
         board.PlacePiece(newPiece)
@@ -216,8 +216,8 @@ class Engine:
     def __init__(self, board):
         self.board = board
     
-    def FindKingPosition(self, colour):
-        for position, piece in self.board.grid.items():
+    def FindKingPosition(self, colour, board):
+        for position, piece in board.grid.items():
             if piece and piece.colour == colour and piece.type == "k":
                 return position
         return None
@@ -225,11 +225,18 @@ class Engine:
     def IsAttacking(self, enemyPiece, kingPosition, board):
         return kingPosition in enemyPiece.CalculatePseudoLegalMoves(board)
     
+    def GetAllPieces(self, board, colour):
+        pieces = []
+        for piece in board.grid.values():
+            if piece is not None and piece.colour == colour:
+                pieces.append(piece)
+        return pieces
+
     def IsCheck(self, colour, board):
         enemyColour = "w" if colour == "b" else "b"
-        kingPosition = self.FindKingPosition(colour)
+        kingPosition = self.FindKingPosition(colour, board)
         for piece in board.GetPieces(enemyColour):
-            if self.IsAttacking(piece, kingPosition, board):
+            if kingPosition in piece.CalculatePseudoLegalMoves(board): # if king attacked by enemy
                 return True
         return False
     
@@ -249,6 +256,8 @@ class Engine:
             # extra check for castling moves - king moving 2 squares to the left/right
             # determine the square the king crosses (sequentially?)
             if piece.type == "k" and abs(piece.position[0] - move[0]) == 2: # only need to observe the x-axis, this could be -2, use abs()
+                if self.IsCheck(piece.colour, board): # king cannot castle if in check
+                    continue
                 if move[0] > piece.position[0]:
                     intermediate = (piece.position[0] + 1, piece.position[1]) # intermediate square (in between) depending on the direction of the castle
                 else:
@@ -279,8 +288,8 @@ class Engine:
     def IsCheckmate(self, colour, board):
         if not self.IsCheck(colour, board):
             return False
-        for piece in board.GetPieces(colour):
-            if self.CalculateLegalMoves(piece, board):
+        for piece in self.GetAllPieces(board, colour):
+            if self.CalculateLegalMoves(piece, board): # if theres a move
                 return False
         return True
 
@@ -316,7 +325,7 @@ class Game:
         self.moveHistory = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -337,7 +346,7 @@ class Game:
             else:
                 piece_type = "p"
             data = "w" + piece_type
-            sprite = pygame.image.load(f'Pieces/{data}.png')
+            sprite = pygame.image.load(f'Pieces/{data}.png').convert_alpha() # images have transparency so converting to alpha is more optimal for blitting
             piece = Piece(data, position, sprite)
             self.board.PlacePiece(piece)
 
@@ -348,7 +357,7 @@ class Game:
             else:
                 piece_type = "p"
             data = "b" + piece_type
-            sprite = pygame.image.load(f'Pieces/{data}.png')
+            sprite = pygame.image.load(f'Pieces/{data}.png').convert_alpha()
             piece = Piece(data, position, sprite)
             self.board.PlacePiece(piece)
 
@@ -432,11 +441,15 @@ class Game:
         # update timer for current player
         self.timers[self.currentTurn].Update()
         # if its an AI's turn, ask AI to choose an execute a move
-        if not self.CurrentPlayerIsHuman():
-            AIMove = self.players[self.currentTurn].ChooseMove(self)
-            if AIMove:
-                piece, move = AIMove
-                self.MakeMove(piece, move)
+        if self.engine.IsCheckmate(self.currentTurn, self.board):
+            print("CHECKMATE DETECTED")
+            self.running = False
+        else:
+            if not self.CurrentPlayerIsHuman():
+                AIMove = self.players[self.currentTurn].ChooseMove(self)
+                if AIMove:
+                    piece, move = AIMove
+                    self.MakeMove(piece, move)
 
     def Render(self):
         self.screen.fill("#04202F")
@@ -473,3 +486,8 @@ main()
 
 ## FLAWS
 # king can still castle even when there is an enemy piece supposedly blocking the path
+# fixed using helper method - IsSquareAttacked()
+# when king is in check, the AI may choose to castle
+# fixed by checking if the king is in check in the CalculateLegalMoves() method
+# does not detect checkmate
+# fixed by GetAllPieces() method in Engine class
