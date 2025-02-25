@@ -90,7 +90,7 @@ class Board:
         offsetX, offsetY = offset
         for i in range(boardSize):
             for j in range(boardSize):
-                colour = "#CDDBE1" if (i + j) % 2 == 0 else "#386F88"
+                colour = "#386F88" if (i + j) % 2 == 0 else "#CDDBE1"
                 rect = (offsetX + i * self.squareSize,
                         offsetY + (boardSize - 1 - j) * self.squareSize,
                         self.squareSize, self.squareSize)
@@ -373,7 +373,7 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -623,20 +623,56 @@ class Game:
                     self.MakeMove(piece, move)
 
     def Render(self):
+        ColourScheme0 = ["red", "green", "yellow", "yellow"]
+        ColourScheme1 = ["#FFD700", "#32CD32", "#B22222", "#FFA500"]
+        ColourScheme2 = ["#00FFFF", "#00FF00", "#FF00FF", "#FF1493"]
+        ColourScheme3 = ["red", "green", "purple", "purple"]
+        ColourScheme4 = ["red", "cyan", "purple", "purple"]
+
+
+        spColour, vmColour, toColour, fmColour = ColourScheme4
+
         self.screen.fill("#04202F")
         self.board.Draw(self.offset)
+
+        # move highlighting (must be first to go under pieces)
+        if self.selectedPiece: # highlighting the selected piece
+            position = BoardToScreen(self.selectedPiece.position, self.offset)
+            square = pygame.Surface((squareSize, squareSize))
+            square.set_alpha(100) # 100/255 opacity
+            square.fill(spColour)
+            self.screen.blit(square, (position[0], position[1]))
+        
+        for move in self.validMoves: # highlighting the selected piece's valid moves
+            position = BoardToScreen(move, self.offset)
+            square = pygame.Surface((squareSize, squareSize))
+            square.set_alpha(50)
+            square.fill(vmColour)
+            self.screen.blit(square, (position[0], position[1]))
+
+        # highlighting last move of a previously moved piece (indicates what moved and where)
+        if self.historyIndex >= 0 and len(self.moveLog) > 0: # we are looking into the past moves so we need to use the move log
+            lastMove = self.moveLog[self.historyIndex]
+
+            fromSquare = pygame.Surface((squareSize, squareSize))
+            fromSquare.set_alpha(100)
+            fromSquare.fill(toColour)
+
+            toSquare = pygame.Surface((squareSize, squareSize))
+            toSquare.set_alpha(100)
+            toSquare.fill(fmColour)
+
+            fromPosition = BoardToScreen((lastMove.startRow, lastMove.startCol), self.offset)
+            toPosition = BoardToScreen((lastMove.endRow, lastMove.endCol), self.offset)
+
+            self.screen.blit(toSquare, toPosition)
+            self.screen.blit(fromSquare, fromPosition)
+
         # render all pieces
         for piece in self.board.grid.values():
             if piece:
                 piece.Render(self.screen, self.offset)
-        # move highlighting
-        if self.selectedPiece:
-            position = BoardToScreen(self.selectedPiece.position, self.offset)
-            pygame.draw.rect(self.screen, "red", (position[0], position[1], squareSize, squareSize), 2)
         
-        for move in self.validMoves:
-            position = BoardToScreen(move, self.offset)
-            pygame.draw.rect(self.screen, "green", (position[0], position[1], squareSize, squareSize), 2)
 
         # game over rendering
         if self.gameOver: # temp message
@@ -684,13 +720,17 @@ main()
 # iterating through lists (scanning move log amd valid moves)
 
 # COULD BE USED:
-
-
 # 1) Trees
 # move/game tree, node - board state, branch - possible move
 # minimax searched through this
 # 2) Binary Search/Sorting
 # sort a list of moves and even binary search when evaluating with piece values for the AI
+
+## WHAT TO ADD
+# AI - Minimax(), Evaluate(), GetBestMove()
+# Integrate interfaces.py
+# Create selection screen for assigning Human/AI to the colours - new interface
+# Highlight squares pieces were recently on
 
 ## FLAWS
 # doesnt detect stalemate
@@ -699,3 +739,7 @@ main()
 # made IsDraw() in Engine
 # game doesnt end when timer ends
 # added a condition that detects this in Update()
+# board squares are inverted
+# inverted the original logic of the Board's Draw() method
+# move highlighting could be improved
+# made a surface that covers an entire square, made it transparent and under the pieces by changing drawing order
