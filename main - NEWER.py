@@ -361,6 +361,9 @@ class Game:
         self.running = True
         self.SetupPieces()
 
+        self.disableAI = False
+        self.gameOver = False
+
     def SetupPieces(self): # sets pieces positions up
         generalOrder = ["r", "n", "b", "q", "k", "b", "n", "r"]
         whitePositions = [(i, 0) for i in range(8)] + [(i, 1) for i in range(8)]
@@ -409,6 +412,7 @@ class Game:
             if piece and piece.colour == self.currentTurn:
                 self.selectedPiece = piece
                 self.validMoves = self.engine.CalculateLegalMoves(piece, self.board)
+                self.disableAI = False
 
         else: # deselect after clicking
             if position in self.validMoves:
@@ -441,6 +445,7 @@ class Game:
         # check for pawn promotion
         if piece.type == "p" and ((piece.colour == "w" and destination[1] == 7) or (piece.colour == "b" and destination[1] == 0)):
             piece.Promote(self.board)
+            move.promoted = True
 
         self.currentTurn = "w" if self.currentTurn == "b" else "b"
 
@@ -486,6 +491,9 @@ class Game:
             self.currentTurn = "w" if self.currentTurn == "b" else "b"
             self.historyIndex -= 1
 
+            # disable AI
+            self.disableAI = True
+
     def RedoMove(self):
         if self.historyIndex < len(self.moveLog) - 1:
             self.historyIndex += 1
@@ -528,6 +536,9 @@ class Game:
             # update turn
             self.currentTurn = "w" if self.currentTurn == "b" else "b"
 
+            # disable AI
+            self.disableAI = True
+
     def CurrentPlayerIsHuman(self):
         return isinstance(self.players[self.currentTurn], Human)
     
@@ -537,9 +548,9 @@ class Game:
         # if its an AI's turn, ask AI to choose an execute a move
         if self.engine.IsCheckmate(self.currentTurn, self.board):
             print("CHECKMATE DETECTED")
-            self.running = False
+            self.gameOver = True # instead of self.running = False
         else:
-            if not self.CurrentPlayerIsHuman():
+            if not self.disableAI and not self.CurrentPlayerIsHuman():
                 AIMove = self.players[self.currentTurn].ChooseMove(self)
                 if AIMove:
                     piece, move = AIMove
@@ -560,6 +571,13 @@ class Game:
         for move in self.validMoves:
             position = BoardToScreen(move, self.offset)
             pygame.draw.rect(self.screen, "green", (position[0], position[1], squareSize, squareSize), 2)
+
+        # game over rendering
+        if self.gameOver: # temp message
+            font = pygame.font.SysFont("Arial", 50)
+            text = font.render("Checkmate!", True, (255, 255, 255))
+            self.screen.blit(text, (self.offset[0], self.offset[1] - 60))
+
         ## ADD INTERFACE RENDERING HERE + TIMERS
         pygame.display.flip()
 
@@ -603,4 +621,6 @@ main()
 # no redo
 # added Redo() and updated Move class, changing MakeMove() and Undo()
 # when against AI, Undo() and Redo() are useless
-# no fix yet
+# disableAI flag
+# program is forced to close when checkmate occurs
+# gameOver flag
