@@ -3,7 +3,7 @@ import random
 
 pygame.init()
 
-# CONSTANTS AND HELPER FUNCTIONS
+# GLOBAL CONSTANTS AND HELPER FUNCTIONS
 squareSize = 100
 boardSize = 8
 offset = (300, 100)
@@ -222,7 +222,7 @@ class Piece:
 
             moves.extend(self.SlidingMoves(board, x, y, directions))
 
-        return [move for move in moves if 0 <= move[0] < 8 and 0 <= move[1] < 8] # filter valid board positions based on limited range
+        return [move for move in moves if 0 <= move[0] < boardSize and 0 <= move[1] < boardSize] # filter valid board positions based on limited range
 
     def SlidingMoves(self, board, x, y, directions):
         moves = []
@@ -427,6 +427,8 @@ class Game:
                             self.highlightedSquares.remove(position)
                         else:
                             self.highlightedSquares.append(position)
+                        self.selectedPiece = None
+                        self.validMoves = []
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
@@ -448,6 +450,7 @@ class Game:
                 self.MakeMove(self.selectedPiece, position)
             self.selectedPiece = None
             self.validMoves = []
+            self.highlightedSquares = []
 
     def MakeMove(self, piece, destination): # logs moves that are made
         # IF MOVES WERE UNDONE BEFORE, DISCARD THE "REDO" MOVES
@@ -746,7 +749,6 @@ main()
 # AI - Minimax(), Evaluate(), GetBestMove()
 # Integrate interfaces.py
 # Create selection screen for assigning Human/AI to the colours - new interface
-# Highlight squares pieces were recently on
 
 ## FLAWS
 # doesnt detect stalemate
@@ -763,3 +765,7 @@ main()
 # added highlightedSquares attribute, RMB detection in HandleEvents(), rendering in Render()
 # highlighted/annotation squares are difficult to remove
 # in HandleHumanClick(), if LMB clicked on an empty square, highlightedSquares list is erased
+# annotations are not removed when a piece is selected
+# in HandleHumanClick(), if LMB clicked on a piece, highlightedSquares list is erased
+# selected piece is not deselected when RMB clicked
+# added to RMB events handling
