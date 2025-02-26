@@ -25,7 +25,7 @@ class Move:
         self.pieceMoved = board.GetPieceAt(startSquare)
         self.pieceCaptured = board.GetPieceAt(endSquare)
         # restore piece's moved state
-        self.pieceMovedWasMoved = self.pieceMoved if self.pieceMoved else None # set it to the piece if there actually is a piece
+        self.pieceMovedWasMoved = self.pieceMoved.moved if self.pieceMoved is not None else None # set it equal to move state if there a piece
         self.oldEnPassantTarget = board.enPassantTarget
 
         # need to determine captured piece for en passant (the captured pawn is NOT on the end square)
@@ -373,7 +373,7 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -492,7 +492,7 @@ class Game:
     def UndoMove(self):
         if self.historyIndex >= 0: # if the move log is not empty, then theres no move to undo duhh
             move = self.moveLog[self.historyIndex]
-            piece = move.pieceMoved
+            piece = move.pieceMoved # retrieve piece object
 
             # move the piece back
             self.board.grid[(move.endRow, move.endCol)] = None
@@ -745,27 +745,15 @@ main()
 # 2) Binary Search/Sorting
 # sort a list of moves and even binary search when evaluating with piece values for the AI
 
+# IMPLEMENTING THE AI
+# Version 0
+# I want visual feedback from Evaluate() and GetBestMove() to monitor for bugs
+
 ## WHAT TO ADD
 # AI - Minimax(), Evaluate(), GetBestMove()
 # Integrate interfaces.py
 # Create selection screen for assigning Human/AI to the colours - new interface
 
 ## FLAWS
-# doesnt detect stalemate
-# added IsStalemate() in Engine, updated Update() and Render() in Game
-# doesnt detect a draw for when there are only 2 kings (very common for basic AI vs basic AI)
-# made IsDraw() in Engine
-# game doesnt end when timer ends
-# added a condition that detects this in Update()
-# board squares are inverted
-# inverted the original logic of the Board's Draw() method
-# move highlighting could be improved
-# made a surface that covers an entire square, made it transparent and under the pieces by changing drawing order
-# no move annotation
-# added highlightedSquares attribute, RMB detection in HandleEvents(), rendering in Render()
-# highlighted/annotation squares are difficult to remove
-# in HandleHumanClick(), if LMB clicked on an empty square, highlightedSquares list is erased
-# annotations are not removed when a piece is selected
-# in HandleHumanClick(), if LMB clicked on a piece, highlightedSquares list is erased
-# selected piece is not deselected when RMB clicked
-# added to RMB events handling
+# redo does not restore double pawn move and castling privileges
+# fixed Move class: `self.pieceMovedWasMoved = self.pieceMoved.moved if self.pieceMoved is not None else None`
