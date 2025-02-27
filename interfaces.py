@@ -3,8 +3,7 @@ import pygame
 pygame.init()
 
 # For the board
-global alphabet
-alphabet = "abcdefgh"
+alphabet = "abcdefgh" # for board coord rendering
 
 # Screen
 screen = pygame.display.set_mode((1400, 1000))
@@ -40,7 +39,6 @@ class Button:
             return True
         return False
 
-
 class Text:
     def __init__(self, position, colour, text, size):
         self.position = position
@@ -50,7 +48,6 @@ class Text:
     def Draw(self, screen):
         screen.blit(self.text, self.position)
 
-
 class Image:
     def __init__(self, position, dimensions, sprite):
         self.position = position
@@ -59,11 +56,18 @@ class Image:
     def Render(self, screen):
         screen.blit(self.sprite, self.position)
 
-
-class Home:
+class Screen:
     def __init__(self, screen):
         self.screen = screen
-        self.InitialiseObjects() # the buttons are initialised when the class is initialised - automatic and instant
+        self.InitialiseObjects()
+
+    def Render(self):
+        # Render background
+        self.screen.fill("#04202F")
+
+class Home(Screen):
+    def __init__(self, screen):
+        super().__init__(screen)
 
     def InitialiseObjects(self):
         # Buttons
@@ -78,8 +82,7 @@ class Home:
         self.settingsIcon = Image((1100, 100), (200, 200), sprite)
 
     def Render(self):
-        # Render background
-        self.screen.fill("#04202F")
+        super().Render()
 
         # Render buttons
         self.playButton.Draw(self.screen)
@@ -91,33 +94,44 @@ class Home:
         # Render settings icon
         self.settingsIcon.Render(self.screen)
 
-
-class Setup:
+class Setup(Screen):
     def __init__(self, screen):
-        self.screen = screen
-        self.timeButtons = [] # empty list for the buttons
-        self.InitialiseObjects()
+        self.timeButtons = []
+        self.timeLabels = ["1 min", "1 | 1", "2 | 1", "3 min", "3 | 2", "5 min", "10 min", "15 | 10", "30 min"]
+        self.timeLabelXOffsets = [75, 57, 50, 75, 55, 75, 95, 90, 87]
+        super().__init__(screen)
 
     def InitialiseObjects(self):
         self.confirmButton = Button(525, 800, 350, 125, (50, 50, 50))
         self.backButton = Button(150, 800, 150, 150, (255, 255, 0))
+        self.infiniteTimeButton = Button(1100, 800, 150, 150, (200, 200, 200))
 
         self.bullet = Text((100, 65), (100, 100, 100), "Bullet", 50)
         self.blitz = Text((100, 290), (100, 100, 100), "Blitz", 50)
         self.rapid = Text((100, 515), (100, 100, 100), "Rapid", 50)
         self.confirm = Text((550, 805), (255, 255, 255), "Confirm", 100)
 
-        for i in range(3): # 3 types of time control
-            for j in range(3): # 3 buttons for each time control
-                button = Button(100 + i * 425, 125 + j * 225, 350, 125, (200, 200, 200))
+        for row in range(3): # 3 types of time control
+            for col in range(3): # 3 buttons for each time control
+                button = Button(100 + col * 425, 125 + row * 225, 350, 125, (200, 200, 200))
                 self.timeButtons.append(button)
+
+        self.timeText = []
+        i = 0
+        for button, label in zip(self.timeButtons, self.timeLabels):
+            position = (button.rect.center[0] - self.timeLabelXOffsets[i], button.rect.center[1] - 40)
+            timeText = Text(position, (0, 0, 0), label, 75)
+            self.timeText.append(timeText)
+            i += 1
 
         sprite = pygame.image.load(f'Images/back.png')
         self.backIcon = Image((150, 800), (150, 150), sprite)
 
+        sprite = pygame.image.load(f'Images/infinity.png')
+        self.infinityIcon = Image((1113, 810), (125, 125), sprite)
+
     def Render(self):
-        # Render background
-        self.screen.fill("#04202F")
+        super().Render()
 
         # Render confirm button
         self.confirmButton.Draw(self.screen)
@@ -125,9 +139,14 @@ class Setup:
         # Render back button
         self.backButton.Draw(self.screen)
 
-        # Render time buttons
+        # Render infinite time button
+        self.infiniteTimeButton.Draw(self.screen)
+
+        # Render time buttons and their respective text
         for button in self.timeButtons:
             button.Draw(self.screen)
+        for timeText in self.timeText:
+            timeText.Draw(self.screen)
 
         # Render text
         self.bullet.Draw(self.screen)
@@ -135,15 +154,14 @@ class Setup:
         self.rapid.Draw(self.screen)
         self.confirm.Draw(self.screen)
 
-        # Render icon
+        # Render icons
         self.backIcon.Render(self.screen)
+        self.infinityIcon.Render(self.screen)
 
-
-class Game:
+class Game(Screen):
     def __init__(self, screen):
-        self.screen = screen
         self.coordText = []
-        self.InitialiseObjects()
+        super().__init__(screen)
 
     def InitialiseObjects(self):
         self.resignButton = Button(1175, 425, 150, 150, (255, 0, 0))
@@ -164,8 +182,7 @@ class Game:
         self.resignIcon = Image((1200, 450), (100, 100), sprite)
 
     def Render(self):
-        # Render background
-        self.screen.fill("#04202F")
+        super().Render()
 
         # Render board
         board.draw((300, 100))
@@ -182,12 +199,10 @@ class Game:
 
         self.resignIcon.Render(self.screen)
 
-
-class Settings:
+class Settings(Screen):
     def __init__(self, screen):
-        self.screen = screen
         self.themeButtons = []
-        self.InitialiseObjects()
+        super().__init__(screen)
 
     def InitialiseObjects(self):
         for i in range(4):
@@ -204,8 +219,7 @@ class Settings:
         self.backIcon = Image((175, 775), (150, 150), sprite)
 
     def Render(self):
-        # Render background
-        self.screen.fill("#04202F")
+        super().Render()
 
         # Render audio button
         self.audioButton.Draw(self.screen)
@@ -291,7 +305,6 @@ while running:
                 if ChessGameScreen.resignButton.IsClicked(clickPosition):
                     updateScreen(0)
 
-
             ### GAME SETTINGS
             if interface == 3:
                 # Audio
@@ -340,24 +353,28 @@ pygame.quit()
 
 ## WHAT TO ADD
 # 1) non-button objects:
-#   player icons - 2
 #   logo? - 1
 #   timers - 2
-#   time control text - 3 //
-#   chess board coordinates - 16 //
-#   player text - 2 //
-#   play text - 1 //
-#   settings text - 1 //
 # 2) pop-ups (later):
 #   win
 #   loss
 #   draw
 
 ## FLAWS
-# looks ugly fr
+# the text labels are not aligned
+# fixed by creating unique offsets for the x-axis
+# buttons are being positioned wrongly (up to down THEN left to right) and not (left to right THEN up to down)
+# fixed by flipping positions of column (i) and row (j)
+# user MUST pick a time control, some may not want a timer at all
+# added infinite time button
 
+# WHAT TO ADD
+# audio
+# audio settings
+# theme button functionality
+# time control buttons functionality
+# 
 
-## CHANGELOG - interfaces.py V5
-# renamed InitialiseButtons() to InitialiseObjects()
-# added Text class
-# incorporated Text class into Home, Setup, Game and Settings class
+## CHANGELOG - interfaces.py V6
+# made the interfaces inherit __init__ and Render() from Screen to reduce repetition (polymorphism)
+# text labels made
