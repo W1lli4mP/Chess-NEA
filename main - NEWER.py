@@ -479,6 +479,45 @@ class AI(Player):
                 return p
         return None
 
+    def OrderMoves(self, moves, board, engine):
+        scoredMoves = []
+        for piece, move in moves:
+            # check piece at the target square.
+            capturedPiece = board.GetPieceAt(move)
+            if capturedPiece is not None:
+                attackerValue = engine.pieceValues.get(piece.type, 0)
+                victimValue = engine.pieceValues.get(capturedPiece.type, 0)
+                score = victimValue - attackerValue
+            else:
+                score = 0
+            scoredMoves.append((score, (piece, move)))
+        
+        sortedMoves = self.MergeSort(scoredMoves)
+        return [movePair for score, movePair in sortedMoves]
+        
+    def MergeSort(self, array):
+        if len(array) <= 1:
+            return array
+        middle = len(array) // 2
+        left = self.MergeSort(array[:middle])
+        right = self.MergeSort(array[middle:])  # Corrected slice for the right half.
+        return self.Merge(left, right)
+
+    def Merge(self, left, right):
+        result = []
+        i = j = 0
+        while i < len(left) and j < len(right):
+            # For descending order, compare scores.
+            if left[i][0] >= right[j][0]:
+                result.append(left[i])
+                i += 1
+            else:
+                result.append(right[j])
+                j += 1
+        result.extend(left[i:])
+        result.extend(right[j:])
+        return result
+
     def Minimax(self, board, engine, depth, alpha, beta, isMaximising, colour):
         boardKey = self.HashBoard(board)
         if boardKey in self.transpositionTable:
@@ -491,7 +530,7 @@ class AI(Player):
             self.transpositionTable[boardKey] = (depth, evaluation)
             return engine.Evaluate(board)
 
-        moves = self.GetAllLegalMovePairs(board, engine, colour)
+        moves = self.OrderMoves(self.GetAllLegalMovePairs(board, engine, colour), board, engine)
         if not moves:
             return engine.Evaluate(board)
 
@@ -560,9 +599,9 @@ class AI(Player):
                 if evaluation < bestEval:
                     bestEval = evaluation
                     bestMove = (piece, move)
-        if bestMove is None:
-            bestMove = random.choice(moves)
-            print("no best moves, random move made!")
+        # if bestMove is None:
+        #     bestMove = random.choice(moves)
+        #     print("cant think of a best move... random move made")
         return bestMove
 
 class Game:
@@ -952,8 +991,7 @@ main()
 # sort a list of moves and even binary search when evaluating with piece values for the AI
 
 ## WHAT TO ADD
-# Move ordering
-# Better evaluation function, consider: piece mobility, king safety, control of the center, etc
+# Better evaluation function, consider: king safety, control of the center, etc
 
 # FINALISING THE PROGRAM
 # Integrate interfaces.py
@@ -968,5 +1006,6 @@ main()
 # opening: rapid development and central control
 
 # FLAWS
-# program crashes out when i add checkmate detection in Evaluate()
-# fixed by making a deep clone of the board
+# AI does not recognise piece values completely
+# added OrderMoves()
+# added merge sort into OrderMoves()
