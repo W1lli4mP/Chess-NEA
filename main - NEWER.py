@@ -386,7 +386,18 @@ class AI(Player):
     def __init__(self, colour):
         super().__init__(colour)
         self.searchDepth = 3
-        # bishops more valuable in end games
+        self.transpositionTable = {} # board hash: (depth, eval)
+
+    def HashBoard(self, board):
+        boardState = []
+        for position in sorted(board.grid.keys()):
+            piece = board.grid[position]
+            if piece is not None:
+                boardState.append((position, piece.colour, piece.type, piece.moved)) # add more perchance
+            else:
+                boardState.append((None, position))
+        boardState.append(("En Passant", board.enPassantTarget))
+        return hash(tuple(boardState))
 
     def ChooseMove(self, game):
         # basic evaluation of the position
@@ -409,11 +420,21 @@ class AI(Player):
         return None
 
     def Minimax(self, board, engine, depth, alpha, beta, isMaximising, colour):
+        boardKey = self.HashBoard(board)
+        if boardKey in self.transpositionTable:
+            storedDepth, storedEvaluation = self.transpositionTable[boardKey]
+            if storedDepth >= depth:
+                return storedEvaluation
+
         if depth == 0:
+            evaluation = engine.Evaluate(board)
+            self.transpositionTable[boardKey] = (depth, evaluation)
             return engine.Evaluate(board)
+
         moves = self.GetAllLegalMovePairs(board, engine, colour)
         if not moves:
             return engine.Evaluate(board)
+
         if isMaximising:
             maxEval = -float("inf")
             for piece, move in moves:
@@ -428,6 +449,7 @@ class AI(Player):
                 alpha = max(alpha, eval)
                 if beta <= alpha:
                     break
+            self.transpositionTable[boardKey] = (depth, maxEval)
             return maxEval
         else:
             minEval = float("inf")
@@ -443,9 +465,11 @@ class AI(Player):
                 beta = min(beta, eval)
                 if beta <= alpha:
                     break
+            self.transpositionTable[boardKey] = (depth, minEval)
             return minEval
 
     def GetBestMove(self, board, engine, depth):
+        self.transpositionTable.clear()
         moves = self.GetAllLegalMovePairs(board, engine, self.colour)
         if not moves:
             return None
@@ -478,6 +502,7 @@ class AI(Player):
                     bestMove = (piece, move)
         if bestMove is None:
             bestMove = random.choice(moves)
+            print("no best moves, random move made!")
         return bestMove
 
 class Game:
@@ -857,22 +882,22 @@ main()
 # Undo() and Redo() act as a stack
 # 4) Linear Search
 # iterating through lists (scanning move log amd valid moves)
-
-# COULD BE USED:
-# 1) Trees
+# 5) Trees
 # move/game tree, node - board state, branch - possible move
 # minimax searched through this
-# 2) Binary Search/Sorting
+
+# COULD BE USED:
+# 1) Binary Search/Sorting
 # sort a list of moves and even binary search when evaluating with piece values for the AI
 
-# IMPLEMENTING THE AI
-# Version 0
-# I want visual feedback from Evaluate() and GetBestMove() to monitor for bugs
+# POTENTIAL UPGRADES
+# Evaluate() could consider: piece mobility, king safety, control of the center, etc
 
 ## WHAT TO ADD
-# AI - Minimax(), Evaluate(), GetBestMove()
 # Integrate interfaces.py
 # Create selection screen for assigning Human/AI to the colours - new interface
+# Iterative deepening
+# Move ordering
 
 ## FLAWS
 # redo does not restore double pawn move and castling privileges
