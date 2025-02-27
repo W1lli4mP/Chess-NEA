@@ -385,7 +385,7 @@ class Human(Player):
 class AI(Player):
     def __init__(self, colour):
         super().__init__(colour)
-        self.searchDepth = 3
+        self.maxDepth = 3
         self.transpositionTable = {} # board hash: (depth, eval)
 
     def HashBoard(self, board):
@@ -393,15 +393,26 @@ class AI(Player):
         for position in sorted(board.grid.keys()):
             piece = board.grid[position]
             if piece is not None:
-                boardState.append((position, piece.colour, piece.type, piece.moved)) # add more perchance
+                boardState.append((position, piece.colour, piece.type, piece.moved))
             else:
                 boardState.append((None, position))
         boardState.append(("En Passant", board.enPassantTarget))
         return hash(tuple(boardState))
 
     def ChooseMove(self, game):
-        # basic evaluation of the position
-        bestMove = self.GetBestMove(game.board, game.engine, self.searchDepth)
+        timer = game.timers[self.colour]
+        timeLimit = timer.GetTime() * 1000
+        startTime = pygame.time.get_ticks()
+
+        bestMove = None
+        depth = 1
+        while depth <= self.maxDepth:
+            if pygame.time.get_ticks() - startTime > timeLimit: # if over time limit, stop
+                break
+            currentBest = self.GetBestMove(game.board, game.engine, depth)
+            if currentBest is not None:
+                bestMove = currentBest
+            depth += 1
         return bestMove
 
     # generates all tuples in the form: (piece, legal move)
@@ -413,7 +424,7 @@ class AI(Player):
                 legalMoves.append((piece, move))
         return legalMoves
 
-    def findPieceClone(self, boardClone, piece):
+    def FindPieceClone(self, boardClone, piece):
         for p in boardClone.grid.values():
             if p is not None and p.colour == piece.colour and p.type == piece.type and p.position == piece.position:
                 return p
@@ -439,14 +450,14 @@ class AI(Player):
             maxEval = -float("inf")
             for piece, move in moves:
                 boardClone = copy.deepcopy(board)
-                pieceClone = self.findPieceClone(boardClone, piece)
+                pieceClone = self.FindPieceClone(boardClone, piece)
                 if pieceClone is None:
                     continue
                 boardClone.MovePiece(pieceClone, move)
                 nextColour = "w" if colour == "b" else "b"
-                eval = self.Minimax(boardClone, engine, depth - 1, alpha, beta, False, nextColour)
-                maxEval = max(maxEval, eval)
-                alpha = max(alpha, eval)
+                evaluation = self.Minimax(boardClone, engine, depth - 1, alpha, beta, False, nextColour)
+                maxEval = max(maxEval, evaluation)
+                alpha = max(alpha, evaluation)
                 if beta <= alpha:
                     break
             self.transpositionTable[boardKey] = (depth, maxEval)
@@ -455,21 +466,21 @@ class AI(Player):
             minEval = float("inf")
             for piece, move in moves:
                 boardClone = copy.deepcopy(board)
-                pieceClone = self.findPieceClone(boardClone, piece)
+                pieceClone = self.FindPieceClone(boardClone, piece)
                 if pieceClone is None:
                     continue
                 boardClone.MovePiece(pieceClone, move)
                 nextColour = "w" if colour == "b" else "b"
-                eval = self.Minimax(boardClone, engine, depth - 1, alpha, beta, True, nextColour)
-                minEval = min(minEval, eval)
-                beta = min(beta, eval)
+                evaluation = self.Minimax(boardClone, engine, depth - 1, alpha, beta, True, nextColour)
+                minEval = min(minEval, evaluation)
+                beta = min(beta, evaluation)
                 if beta <= alpha:
                     break
             self.transpositionTable[boardKey] = (depth, minEval)
             return minEval
 
     def GetBestMove(self, board, engine, depth):
-        self.transpositionTable.clear()
+        #self.transpositionTable.clear() - remove if good RAM
         moves = self.GetAllLegalMovePairs(board, engine, self.colour)
         if not moves:
             return None
@@ -478,27 +489,27 @@ class AI(Player):
             bestEval = -float("inf")
             for piece, move in moves:
                 boardClone = copy.deepcopy(board)
-                pieceClone = self.findPieceClone(boardClone, piece)
+                pieceClone = self.FindPieceClone(boardClone, piece)
                 if pieceClone is None:
                     continue
                 boardClone.MovePiece(pieceClone, move)
                 # blacks move next turn
-                eval = self.Minimax(boardClone, engine, depth - 1, -float("inf"), float("inf"), False, "b") # minimising
-                if eval > bestEval:
-                    bestEval = eval
+                evaluation = self.Minimax(boardClone, engine, depth - 1, -float("inf"), float("inf"), False, "b") # minimising
+                if evaluation > bestEval:
+                    bestEval = evaluation
                     bestMove = (piece, move)
         else:
             bestEval = float("inf")
             for piece, move in moves:
                 boardClone = copy.deepcopy(board)
-                pieceClone = self.findPieceClone(boardClone, piece)
+                pieceClone = self.FindPieceClone(boardClone, piece)
                 if pieceClone is None:
                     continue
                 boardClone.MovePiece(pieceClone, move)
                 # whites move next turn
-                eval = self.Minimax(boardClone, engine, depth - 1, -float("inf"), float("inf"), True, "w") # maximising
-                if eval < bestEval:
-                    bestEval = eval
+                evaluation = self.Minimax(boardClone, engine, depth - 1, -float("inf"), float("inf"), True, "w") # maximising
+                if evaluation < bestEval:
+                    bestEval = evaluation
                     bestMove = (piece, move)
         if bestMove is None:
             bestMove = random.choice(moves)
@@ -875,6 +886,7 @@ main()
 # USED:
 # 1) Dictionaries (Hash Tables)
 # the board is a dictionary
+# transposition table
 # 2) Lists (Dynamic Arrays)
 # moveLog is a list that stores all moves
 # validMoves and products of GetPieces() are also lists
@@ -890,16 +902,10 @@ main()
 # 1) Binary Search/Sorting
 # sort a list of moves and even binary search when evaluating with piece values for the AI
 
-# POTENTIAL UPGRADES
-# Evaluate() could consider: piece mobility, king safety, control of the center, etc
-
 ## WHAT TO ADD
 # Integrate interfaces.py
 # Create selection screen for assigning Human/AI to the colours - new interface
-# Iterative deepening
 # Move ordering
+# Better evaluation function, consider: piece mobility, king safety, control of the center, etc
 
 ## FLAWS
-# redo does not restore double pawn move and castling privileges
-# fixed Move class: `self.pieceMovedWasMoved = self.pieceMoved.moved if self.pieceMoved is not None else None`
-# removed GetAllPieces() method in Engine due to redundancy
