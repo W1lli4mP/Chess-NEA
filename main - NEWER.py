@@ -385,12 +385,12 @@ class Human(Player):
 class AI(Player):
     def __init__(self, colour):
         super().__init__(colour)
-        self.searchDepth = 2
+        self.searchDepth = 3
         # bishops more valuable in end games
 
     def ChooseMove(self, game):
         # basic evaluation of the position
-        bestMove = self.GetBestMove(game.board, game.engine)
+        bestMove = self.GetBestMove(game.board, game.engine, self.searchDepth)
         return bestMove
 
     # generates all tuples in the form: (piece, legal move)
@@ -402,45 +402,83 @@ class AI(Player):
                 legalMoves.append((piece, move))
         return legalMoves
 
-    def Minimax(self, board, engine, depth, alpha, beta, isMaximising, colour):
-        legalMoves = self.GetAllLegalMovePairs(board, engine, colour)
-        pass
+    def findPieceClone(self, boardClone, piece):
+        for p in boardClone.grid.values():
+            if p is not None and p.colour == piece.colour and p.type == piece.type and p.position == piece.position:
+                return p
+        return None
 
-    def GetBestMove(self, board, engine):
+    def Minimax(self, board, engine, depth, alpha, beta, isMaximising, colour):
+        if depth == 0:
+            return engine.Evaluate(board)
+        moves = self.GetAllLegalMovePairs(board, engine, colour)
+        if not moves:
+            return engine.Evaluate(board)
+        if isMaximising:
+            maxEval = -float("inf")
+            for piece, move in moves:
+                boardClone = copy.deepcopy(board)
+                pieceClone = self.findPieceClone(boardClone, piece)
+                if pieceClone is None:
+                    continue
+                boardClone.MovePiece(pieceClone, move)
+                nextColour = "w" if colour == "b" else "b"
+                eval = self.Minimax(boardClone, engine, depth - 1, alpha, beta, False, nextColour)
+                maxEval = max(maxEval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return maxEval
+        else:
+            minEval = float("inf")
+            for piece, move in moves:
+                boardClone = copy.deepcopy(board)
+                pieceClone = self.findPieceClone(boardClone, piece)
+                if pieceClone is None:
+                    continue
+                boardClone.MovePiece(pieceClone, move)
+                nextColour = "w" if colour == "b" else "b"
+                eval = self.Minimax(boardClone, engine, depth - 1, alpha, beta, True, nextColour)
+                minEval = min(minEval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return minEval
+
+    def GetBestMove(self, board, engine, depth):
         moves = self.GetAllLegalMovePairs(board, engine, self.colour)
         if not moves:
             return None
-
         bestMove = None
-        bestEvaluation = -float("inf") if self.colour == "w" else float("inf")
-
-        for piece, move in moves:
-            boardClone = copy.deepcopy(board)
-            pieceClone = None
-
-            for p in boardClone.grid.values():
-                if p is not None and p.colour == piece.colour and p.type == piece.type and p.position == piece.position:
-                    pieceClone = p
-                    break
-            if pieceClone is None:
-                continue
-
-            boardClone.MovePiece(pieceClone, move)
-            evaluation = engine.Evaluate(boardClone)
-
-            if self.colour == "w":
-                if evaluation > bestEvaluation: # maximise
-                    bestEvaluation = evaluation
+        if self.colour == "w":
+            bestEval = -float("inf")
+            for piece, move in moves:
+                boardClone = copy.deepcopy(board)
+                pieceClone = self.findPieceClone(boardClone, piece)
+                if pieceClone is None:
+                    continue
+                boardClone.MovePiece(pieceClone, move)
+                # blacks move next turn
+                eval = self.Minimax(boardClone, engine, depth - 1, -float("inf"), float("inf"), False, "b") # minimising
+                if eval > bestEval:
+                    bestEval = eval
                     bestMove = (piece, move)
-            else:
-                if evaluation < bestEvaluation: # minimise
-                    bestEvaluation = evaluation
+        else:
+            bestEval = float("inf")
+            for piece, move in moves:
+                boardClone = copy.deepcopy(board)
+                pieceClone = self.findPieceClone(boardClone, piece)
+                if pieceClone is None:
+                    continue
+                boardClone.MovePiece(pieceClone, move)
+                # whites move next turn
+                eval = self.Minimax(boardClone, engine, depth - 1, -float("inf"), float("inf"), True, "w") # maximising
+                if eval < bestEval:
+                    bestEval = eval
                     bestMove = (piece, move)
-                    
-            if bestMove is None:
-                bestMove = random.choice(moves) # in case theres no best move
-
-            return bestMove
+        if bestMove is None:
+            bestMove = random.choice(moves)
+        return bestMove
 
 class Game:
     def __init__(self, screen):
