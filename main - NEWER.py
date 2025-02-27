@@ -1,5 +1,6 @@
 import pygame
 import random
+import copy
 
 pygame.init()
 
@@ -86,6 +87,20 @@ class Board:
         self.grid = {(x, y): None for x in range(boardSize) for y in range(boardSize)}
         self.enPassantTarget = None
 
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        # Instead of copying the screen, we just assign the same reference.
+        result.screen = self.screen  
+        result.squareSize = self.squareSize
+        # Deepcopy the grid manually so that each Piece is copied (using our overridden __deepcopy__)
+        result.grid = {}
+        for key, piece in self.grid.items():
+            result.grid[key] = copy.deepcopy(piece, memo) if piece is not None else None
+        result.enPassantTarget = self.enPassantTarget
+        return result
+
     def Draw(self, offset=offset):
         offsetX, offsetY = offset
         for i in range(boardSize):
@@ -105,8 +120,8 @@ class Board:
         # en passant
         if piece.type == "p" and newPosition == self.enPassantTarget:
             direction = 1 if piece.colour == "w" else -1
-            captured_pos = (newPosition[0], newPosition[1] - direction)
-            captured = self.GetPieceAt(captured_pos)
+            capturedPosition = (newPosition[0], newPosition[1] - direction)
+            captured = self.GetPieceAt(capturedPosition)
             if captured and captured.type == "p":
                 self.RemovePiece(captured)
         self.grid[oldPosition] = None
@@ -135,6 +150,19 @@ class Piece:
         self.sprite = pygame.transform.scale(sprite, (squareSize, squareSize))
         self.moved = False
         self.castled = False
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        result.colour = self.colour
+        result.type = self.type
+        result.position = self.position  # immutable tuple, so it's safe to share
+        # Do not deepcopy the sprite; just share the reference
+        result.sprite = self.sprite
+        result.moved = self.moved
+        result.castled = self.castled
+        return result
 
     def Render(self, screen, offset=offset):
         position = BoardToScreen(self.position, offset)
@@ -249,6 +277,7 @@ class Piece:
 class Engine:
     def __init__(self, board):
         self.board = board
+        self.pieceValues = {"p": 1, "n": 3.2, "b": 3.3, "r": 5, "q": 9, "k": 20}
     
     def FindKingPosition(self, colour, board):
         for position, piece in board.grid.items():
@@ -258,13 +287,6 @@ class Engine:
     
     def IsAttacking(self, enemyPiece, kingPosition, board):
         return kingPosition in enemyPiece.CalculatePseudoLegalMoves(board)
-    
-    def GetAllPieces(self, board, colour):
-        pieces = []
-        for piece in board.grid.values():
-            if piece is not None and piece.colour == colour:
-                pieces.append(piece)
-        return pieces
 
     def IsCheck(self, colour, board):
         enemyColour = "w" if colour == "b" else "b"
@@ -322,7 +344,7 @@ class Engine:
     def IsCheckmate(self, colour, board):
         if not self.IsCheck(colour, board):
             return False
-        for piece in self.GetAllPieces(board, colour):
+        for piece in board.GetPieces(colour):
             if self.CalculateLegalMoves(piece, board): # if theres a move
                 return False
         return True
@@ -330,7 +352,7 @@ class Engine:
     def IsStalemate(self, colour, board):
         if self.IsCheck(colour, board):
             return False
-        for piece in self.GetAllPieces(board, colour):
+        for piece in board.GetPieces(colour):
             if self.CalculateLegalMoves(piece, board):
                 return False
         return True
@@ -340,6 +362,16 @@ class Engine:
         # if there are exactly 2 pieces and both are kings, thats a draw.
         if len(pieces) == 2 and all(piece.type == "k" for piece in pieces):
             return True
+
+    def Evaluate(self, board):
+        evaluation = 0
+        for piece in board.grid.values():
+            if piece is not None:
+                if piece.colour == "w":
+                    evaluation += self.pieceValues.get(piece.type, 0) # white maximises
+                else:
+                    evaluation -= self.pieceValues.get(piece.type, 0) # black minimises
+        return evaluation
 
 class Player:
     def __init__(self, colour):
@@ -353,18 +385,63 @@ class Human(Player):
 class AI(Player):
     def __init__(self, colour):
         super().__init__(colour)
+        self.searchDepth = 2
+        # bishops more valuable in end games
 
     def ChooseMove(self, game):
-        # basic AI
-        moves = []
-        for piece in game.board.GetPieces(self.colour):
-            legalMoves = game.engine.CalculateLegalMoves(piece, game.board)
-            for destination in legalMoves:
-                moves.append((piece, destination))
-        if moves:
-            return random.choice(moves)
-        return None
-    
+        # basic evaluation of the position
+        bestMove = self.GetBestMove(game.board, game.engine)
+        return bestMove
+
+    # generates all tuples in the form: (piece, legal move)
+    def GetAllLegalMovePairs(self, board, engine, colour):
+        legalMoves = []
+        for piece in board.GetPieces(colour):
+            moves = engine.CalculateLegalMoves(piece, board)
+            for move in moves:
+                legalMoves.append((piece, move))
+        return legalMoves
+
+    def Minimax(self, board, engine, depth, alpha, beta, isMaximising, colour):
+        legalMoves = self.GetAllLegalMovePairs(board, engine, colour)
+        pass
+
+    def GetBestMove(self, board, engine):
+        moves = self.GetAllLegalMovePairs(board, engine, self.colour)
+        if not moves:
+            return None
+
+        bestMove = None
+        bestEvaluation = -float("inf") if self.colour == "w" else float("inf")
+
+        for piece, move in moves:
+            boardClone = copy.deepcopy(board)
+            pieceClone = None
+
+            for p in boardClone.grid.values():
+                if p is not None and p.colour == piece.colour and p.type == piece.type and p.position == piece.position:
+                    pieceClone = p
+                    break
+            if pieceClone is None:
+                continue
+
+            boardClone.MovePiece(pieceClone, move)
+            evaluation = engine.Evaluate(boardClone)
+
+            if self.colour == "w":
+                if evaluation > bestEvaluation: # maximise
+                    bestEvaluation = evaluation
+                    bestMove = (piece, move)
+            else:
+                if evaluation < bestEvaluation: # minimise
+                    bestEvaluation = evaluation
+                    bestMove = (piece, move)
+                    
+            if bestMove is None:
+                bestMove = random.choice(moves) # in case theres no best move
+
+            return bestMove
+
 class Game:
     def __init__(self, screen):
         self.screen = screen
@@ -373,7 +450,7 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -701,12 +778,17 @@ class Game:
 
         # timer render
         font = pygame.font.SysFont("Arial", 36)
-        black_time = int(self.timers["b"].GetTime())
-        white_time = int(self.timers["w"].GetTime())
-        black_text = font.render(f"Black: {black_time}", True, (255, 255, 255))
-        white_text = font.render(f"White: {white_time}", True, (255, 255, 255))
-        self.screen.blit(black_text, (20, 20))
-        self.screen.blit(white_text, (20, self.screen.get_height() - 40))
+        blackTime = int(self.timers["b"].GetTime())
+        whiteTime = int(self.timers["w"].GetTime())
+        blackText = font.render(f"Black: {blackTime}", True, (255, 255, 255))
+        whiteText = font.render(f"White: {whiteTime}", True, (255, 255, 255))
+        self.screen.blit(blackText, (20, 20))
+        self.screen.blit(whiteText, (20, self.screen.get_height() - 40))
+
+        # evaluation render
+        font = pygame.font.SysFont("Arial", 50)
+        text = font.render(str(round(self.engine.Evaluate(self.board), 2)), True, (255, 255, 255))
+        self.screen.blit(text, (self.offset[0], self.offset[1] + 800))
 
         ## ADD INTERFACE RENDERING HERE
         pygame.display.flip()
@@ -757,3 +839,4 @@ main()
 ## FLAWS
 # redo does not restore double pawn move and castling privileges
 # fixed Move class: `self.pieceMovedWasMoved = self.pieceMoved.moved if self.pieceMoved is not None else None`
+# removed GetAllPieces() method in Engine due to redundancy
