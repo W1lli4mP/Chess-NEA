@@ -1,6 +1,7 @@
 import pygame
 import random
 import copy
+from heapq import heappush, heappop
 
 pygame.init()
 
@@ -363,6 +364,38 @@ class Engine:
         if len(pieces) == 2 and all(piece.type == "k" for piece in pieces):
             return True
 
+    def PawnPromotionDistance(self, pawn, board):
+        direction = 1 if pawn.colour == "w" else -1
+        promotionRank = 7 if pawn.colour == "w" else 0
+        start = pawn.position
+
+        if start[1] == promotionRank:
+            return 0
+
+        heap = []
+        heappush(heap, (0, start))
+        visited = set()
+
+        while heap:
+            cost, position = heappop(heap)
+            if position in visited:
+                continue
+            visited.add(position)
+            if position[1] == promotionRank:
+                return cost
+            
+            forward = (position[0], position[1] + direction)
+            if 0 <= forward[1] < boardSize and board.GetPieceAt(forward) is None:
+                heappush(heap, (cost + 1, forward))
+
+            for dx in [-1, 1]:
+                diagonal = (position[0] + dx, position[1] + direction)
+                if 0 <= diagonal[0] < boardSize and 0 <= diagonal[1] < boardSize:
+                    piece = board.GetPieceAt(diagonal)
+                    if piece is not None and piece.colour != pawn.colour:
+                        heappush(heap, (cost + 1, diagonal))
+        return float("inf")
+
     def Evaluate(self, board):
         evaluation = 0
         for piece in board.grid.values():
@@ -371,6 +404,22 @@ class Engine:
                     evaluation += self.pieceValues.get(piece.type, 0) # white maximises
                 else:
                     evaluation -= self.pieceValues.get(piece.type, 0) # black minimises
+
+                if piece.type == "p":
+                    distance = self.PawnPromotionDistance(piece, board)
+                    if distance < float("inf"):
+                        bonus = (8 - distance) * 0.5
+                        if piece.colour == "w":
+                            evaluation += bonus
+                        else:
+                            evaluation -= bonus
+
+        boardClone = copy.deepcopy(board)
+        if self.IsCheckmate("w", boardClone):
+            return -float("inf")
+        if self.IsCheckmate("b", boardClone):
+            return float("inf")
+
         return evaluation
 
 class Player:
@@ -903,9 +952,21 @@ main()
 # sort a list of moves and even binary search when evaluating with piece values for the AI
 
 ## WHAT TO ADD
-# Integrate interfaces.py
-# Create selection screen for assigning Human/AI to the colours - new interface
 # Move ordering
 # Better evaluation function, consider: piece mobility, king safety, control of the center, etc
 
-## FLAWS
+# FINALISING THE PROGRAM
+# Integrate interfaces.py
+# Create selection screen for assigning Human/AI to the colours - new interface NEEDED
+# Replayability
+
+# ADDED DIJKSTRA-INSPIRED ALGORITHM in Evaluate()
+# how to improve its effectiveness?
+# differentiate game phases
+# endgames: pawn promotion and king activity
+# middlegames: piece coordination and tactical possibilities
+# opening: rapid development and central control
+
+# FLAWS
+# program crashes out when i add checkmate detection in Evaluate()
+# fixed by making a deep clone of the board
