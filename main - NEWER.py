@@ -2,6 +2,7 @@ import pygame
 import random
 import copy
 from heapq import heappush, heappop
+import threading
 
 pygame.init()
 
@@ -142,7 +143,7 @@ class Board:
     
     def GetPieces(self, colour):
         return [p for p in self.grid.values() if p is not None and p.colour == colour]
-    
+
 class Piece:
     def __init__(self, data, position, sprite):
         self.colour = data[0]
@@ -386,14 +387,38 @@ class Engine:
             
             forward = (position[0], position[1] + direction)
             if 0 <= forward[1] < boardSize and board.GetPieceAt(forward) is None:
-                heappush(heap, (cost + 1, forward))
+                heappush(heap, (cost + 0.1, forward))
 
             for dx in [-1, 1]:
                 diagonal = (position[0] + dx, position[1] + direction)
                 if 0 <= diagonal[0] < boardSize and 0 <= diagonal[1] < boardSize:
                     piece = board.GetPieceAt(diagonal)
                     if piece is not None and piece.colour != pawn.colour:
-                        heappush(heap, (cost + 1, diagonal))
+                        heappush(heap, (cost + 0.1, diagonal))
+        return float("inf")
+
+    def KingSafetyDistance(self, king, board):
+        goodRank = 0
+        start = king.position
+
+        if start[1] == goodRank:
+            return 0
+
+        heap = []
+        heappush(heap, (0, start))
+        visited = set()
+
+        while heap:
+            cost, position = heappop(heap)
+            if position in visited:
+                continue
+            visited.add(position)
+            if position[1] == goodRank:
+                return cost
+            
+            forward = (position)
+            if 0 <= forward[1] < boardSize and board.GetPieceAt(forward) is None:
+                heappush(heap, (cost + 0.1, forward))
         return float("inf")
 
     def Evaluate(self, board):
@@ -408,11 +433,22 @@ class Engine:
                 if piece.type == "p":
                     distance = self.PawnPromotionDistance(piece, board)
                     if distance < float("inf"):
+                        bonus = (8 - distance) * 0.1
+                        if piece.colour == "w":
+                            evaluation += bonus
+                        else:
+                            evaluation -= bonus
+
+                if piece.type == "k":
+                    distance = self.KingSafetyDistance(piece, board)
+                    if distance < float("inf"):
                         bonus = (8 - distance) * 0.5
                         if piece.colour == "w":
                             evaluation += bonus
                         else:
                             evaluation -= bonus
+
+                            
 
         boardClone = copy.deepcopy(board)
         if self.IsCheckmate("w", boardClone):
@@ -434,7 +470,7 @@ class Human(Player):
 class AI(Player):
     def __init__(self, colour):
         super().__init__(colour)
-        self.maxDepth = 3
+        self.maxDepth = 2
         self.transpositionTable = {} # board hash: (depth, eval)
 
     def HashBoard(self, board):
@@ -617,7 +653,7 @@ class Game:
         self.selectedPiece = None
         self.validMoves = []
         self.offset = offset
-        self.timers = {"w": Timer(100000), "b": Timer(10000)} # change later to respond to user input
+        self.timers = {"w": Timer(60), "b": Timer(60)} # change later to respond to user input
         self.running = True
         self.SetupPieces()
 
@@ -664,7 +700,7 @@ class Game:
                     elif event.button == 3:
                         if position in self.highlightedSquares:
                             self.highlightedSquares.remove(position)
-                        else:
+                        elif 0 <= position[0] < boardSize and 0 <= position[1] < boardSize: # make sure we can highlight the board's squares only
                             self.highlightedSquares.append(position)
                         self.selectedPiece = None
                         self.validMoves = []
@@ -830,6 +866,12 @@ class Game:
     def CurrentPlayerIsHuman(self):
         return isinstance(self.players[self.currentTurn], Human)
     
+    def ComputeAIMove(self):
+        AIMove = self.players[self.currentTurn].ChooseMove(self)
+        if AIMove:
+            piece, move = AIMove
+            self.MakeMove(piece, move)
+    
     def Update(self):
         if self.timers[self.currentTurn].GetTime() <= 0:
             self.gameOver = True
@@ -867,10 +909,8 @@ class Game:
 
         # if its an AI's turn, ask AI to choose an execute a move
         if not self.disableAI and not self.CurrentPlayerIsHuman():
-                AIMove = self.players[self.currentTurn].ChooseMove(self)
-                if AIMove:
-                    piece, move = AIMove
-                    self.MakeMove(piece, move)
+            self.disableAI = True # the ai must be disabled after because 
+            threading.Thread(target=self.ComputeAIMove).start() # moved original script into a separate method so it can be processed simultaneously on another thread
 
     def Render(self):
         ColourScheme0 = ["red", "green", "yellow", "yellow"]
@@ -1005,7 +1045,8 @@ main()
 # middlegames: piece coordination and tactical possibilities
 # opening: rapid development and central control
 
-# FLAWS
-# AI does not recognise piece values completely
-# added OrderMoves()
-# added merge sort into OrderMoves()
+# FLAWs/BUGS
+# can highlight squares outside of the board
+# added a condition after RMB pressed
+# ai steals human player's time >:(
+# runs ai search in a separate thread
