@@ -281,6 +281,17 @@ class Engine:
         self.board = board
         self.pieceValues = {"p": 1, "n": 3.2, "b": 3.3, "r": 5, "q": 9, "k": 20}
     
+    def HashBoard(self, board):
+        boardState = []
+        for position in sorted(board.grid.keys()):
+            piece = board.grid[position]
+            if piece is not None:
+                boardState.append((position, piece.colour, piece.type, piece.moved))
+            else:
+                boardState.append((None, position))
+        boardState.append(("En Passant", board.enPassantTarget))
+        return hash(tuple(boardState))
+
     def FindKingPosition(self, colour, board):
         for position, piece in board.grid.items():
             if piece and piece.colour == colour and piece.type == "k":
@@ -397,30 +408,6 @@ class Engine:
                         heappush(heap, (cost + 0.1, diagonal))
         return float("inf")
 
-    def KingSafetyDistance(self, king, board):
-        goodRank = 0
-        start = king.position
-
-        if start[1] == goodRank:
-            return 0
-
-        heap = []
-        heappush(heap, (0, start))
-        visited = set()
-
-        while heap:
-            cost, position = heappop(heap)
-            if position in visited:
-                continue
-            visited.add(position)
-            if position[1] == goodRank:
-                return cost
-            
-            forward = (position)
-            if 0 <= forward[1] < boardSize and board.GetPieceAt(forward) is None:
-                heappush(heap, (cost + 0.1, forward))
-        return float("inf")
-
     def Evaluate(self, board):
         evaluation = 0
         for piece in board.grid.values():
@@ -438,17 +425,6 @@ class Engine:
                             evaluation += bonus
                         else:
                             evaluation -= bonus
-
-                if piece.type == "k":
-                    distance = self.KingSafetyDistance(piece, board)
-                    if distance < float("inf"):
-                        bonus = (8 - distance) * 0.5
-                        if piece.colour == "w":
-                            evaluation += bonus
-                        else:
-                            evaluation -= bonus
-
-                            
 
         boardClone = copy.deepcopy(board)
         if self.IsCheckmate("w", boardClone):
@@ -470,19 +446,8 @@ class Human(Player):
 class AI(Player):
     def __init__(self, colour):
         super().__init__(colour)
-        self.maxDepth = 2
+        self.maxDepth = 3
         self.transpositionTable = {} # board hash: (depth, eval)
-
-    def HashBoard(self, board):
-        boardState = []
-        for position in sorted(board.grid.keys()):
-            piece = board.grid[position]
-            if piece is not None:
-                boardState.append((position, piece.colour, piece.type, piece.moved))
-            else:
-                boardState.append((None, position))
-        boardState.append(("En Passant", board.enPassantTarget))
-        return hash(tuple(boardState))
 
     def ChooseMove(self, game):
         timer = game.timers[self.colour]
@@ -555,7 +520,7 @@ class AI(Player):
         return result
 
     def Minimax(self, board, engine, depth, alpha, beta, isMaximising, colour):
-        boardKey = self.HashBoard(board)
+        boardKey = engine.HashBoard(board)
         if boardKey in self.transpositionTable:
             storedDepth, storedEvaluation = self.transpositionTable[boardKey]
             if storedDepth >= depth:
@@ -648,7 +613,7 @@ class Game:
         self.moveLog = []
         self.historyIndex = -1
 
-        self.players = {"w": Human("w"), "b": AI("b")} # CHANGE FOR TESTING
+        self.players = {"w": Human("w"), "b": Human("b")} # CHANGE FOR TESTING
         self.currentTurn = "w"
         self.selectedPiece = None
         self.validMoves = []
@@ -660,6 +625,7 @@ class Game:
         self.disableAI = False
         self.gameOver = False
         self.highlightedSquares = []
+        self.positionCount = {} # counts how many times a position has been repeated
 
     def SetupPieces(self): # sets pieces positions up
         generalOrder = ["r", "n", "b", "q", "k", "b", "n", "r"]
@@ -691,6 +657,17 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    self.UndoMove()
+                if event.key == pygame.K_RIGHT:
+                    self.RedoMove()
+
+            # ignore mouse inputs if game is over
+            if self.gameOver:
+                continue
+
             # only handle mouse clicks if it is a human player's turn
             if self.CurrentPlayerIsHuman():
                 if event.type == pygame.MOUSEBUTTONDOWN:
@@ -704,12 +681,6 @@ class Game:
                             self.highlightedSquares.append(position)
                         self.selectedPiece = None
                         self.validMoves = []
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    self.UndoMove()
-                if event.key == pygame.K_RIGHT:
-                    self.RedoMove()
         
     def HandleHumanClick(self, position): # handles selecting/deselecting pieces
         piece = self.board.GetPieceAt(position)
@@ -753,6 +724,14 @@ class Game:
         if piece.type == "p" and ((piece.colour == "w" and destination[1] == 7) or (piece.colour == "b" and destination[1] == 0)):
             piece.Promote(self.board)
             move.promoted = True
+
+        # update the repetition counter
+        boardStateHash = self.engine.HashBoard(self.board)
+        self.positionCount[boardStateHash] = self.positionCount.get(boardStateHash, 0) + 1
+
+        if self.positionCount[boardStateHash] >= 3:
+            self.gameOver = True
+            self.gameOverMessage = "Draw by threefold repetiion"
 
         # switching turns (now with timers)
         if self.currentTurn == "w":
@@ -805,6 +784,11 @@ class Game:
 
             # revert the turn
             self.currentTurn = "w" if self.currentTurn == "b" else "b"
+
+            # decrement repetition count for the state after undoing
+            boardStateHash = self.engine.HashBoard(self.board)
+            if boardStateHash in self.positionCount:
+                self.positionCount[boardStateHash] -= 1
             self.historyIndex -= 1
 
             # clear selection
@@ -862,6 +846,13 @@ class Game:
 
             # disable AI
             self.disableAI = True
+
+            # update repetition counter for redoing move
+            boardStateHash = self.engine.HashBoard(self.board)
+            self.positionCount[boardStateHash] = self.positionCount.get(boardStateHash, 0) + 1
+            if self.positionCount[boardStateHash] >= 3:
+                self.gameOver = True
+                self.gameOverMessage = "Draw by threefold repetition!"
 
     def CurrentPlayerIsHuman(self):
         return isinstance(self.players[self.currentTurn], Human)
@@ -1025,28 +1016,15 @@ main()
 # 5) Trees
 # move/game tree, node - board state, branch - possible move
 # minimax searched through this
+# 6) Merge Sort
+# sort a list of moves when evaluating with piece values for the AI
 
-# COULD BE USED:
-# 1) Binary Search/Sorting
-# sort a list of moves and even binary search when evaluating with piece values for the AI
-
-## WHAT TO ADD
-# Better evaluation function, consider: king safety, control of the center, etc
-
-# FINALISING THE PROGRAM
-# Integrate interfaces.py
-# Create selection screen for assigning Human/AI to the colours - new interface NEEDED
-# Replayability
-
-# ADDED DIJKSTRA-INSPIRED ALGORITHM in Evaluate()
-# how to improve its effectiveness?
-# differentiate game phases
-# endgames: pawn promotion and king activity
-# middlegames: piece coordination and tactical possibilities
-# opening: rapid development and central control
-
-# FLAWs/BUGS
-# can highlight squares outside of the board
-# added a condition after RMB pressed
-# ai steals human player's time >:(
-# runs ai search in a separate thread
+## FLAWS
+# there is no draw by 3 move repetition
+# fixed by using the HashBoard method to do this
+# HashBoard method is in the AI class and not the engine class
+# fixed by moving BoardHash method from AI to Engine
+# players can still move when draw has occurred
+# fixed by ignoring inputs if game is over
+# players cannot undo and redo moves to check game history after a game has concluded
+# fixed by moving the order of inputs
